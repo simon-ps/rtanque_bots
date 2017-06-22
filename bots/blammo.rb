@@ -4,7 +4,7 @@ class Blammo < RTanque::Bot::Brain
 
   INTERVAL = 10000
 
-  TURRET_FIRE_RANGE = RTanque::Heading::ONE_DEGREE
+  TURRET_FIRE_RANGE = RTanque::Heading::ONE_DEGREE * 3
 
   FIRE_POWER = MAX_FIRE_POWER
 
@@ -23,6 +23,7 @@ class Blammo < RTanque::Bot::Brain
       fire_at_target
 
       get_behind_target
+      @old_target_heading = @target_heading
     else
       acquire_target
     end
@@ -33,7 +34,7 @@ class Blammo < RTanque::Bot::Brain
 
     move
 
-    at_tick_interval(300) do
+    at_tick_interval(200) do
       @side = -@side
       @jink = false
     end
@@ -66,22 +67,28 @@ class Blammo < RTanque::Bot::Brain
 
   def point_turret_at_target
     return unless @target_old && @my_old_pos
-    @leading_heading = calculate_leading_heading
-    command.turret_heading = @leading_heading
+    command.turret_heading = @leading_heading = calculate_leading_heading
   end
 
   def calculate_leading_heading
+    @old_target_heading ||= @target_heading
     my_shot_pos = sensors.position
     target_pos = @new_target_point
     estimated_ticks = 0
+    heading_change = @old_target_heading.delta(@target_heading)
+    estimated_target_heading = @target_heading
+
+    #puts "old: #{@old_target_heading.to_degrees}, new: #{@target_heading.to_degrees}, change: #{heading_change.to_f}"
     while sensors.position.distance(my_shot_pos) < sensors.position.distance(target_pos)
       estimated_ticks += 1
-      target_pos = @new_target_point.move(@target_heading, @target_speed * estimated_ticks)
-      my_shot_pos = sensors.position.move(sensors.position.heading(target_pos), 5 + RTanque::Shell.speed(FIRE_POWER) * estimated_ticks)
+      estimated_target_heading += heading_change
+      target_pos = target_pos.move(estimated_target_heading, @target_speed)
+      #puts "  estimated_target_heading: #{estimated_target_heading.to_degrees}, target_pos: #{target_pos.x} #{target_pos.y}"
+      my_shot_pos = sensors.position.move(sensors.position.heading(target_pos), RTanque::Shell.speed(FIRE_POWER) * estimated_ticks)
       break if estimated_ticks > 200
     end
 
-    sensors.position.heading(@new_target_point.move(@target_heading, estimated_ticks * @target_speed))
+    sensors.position.heading(target_pos)
   end
 
   def fire_at_target
@@ -98,7 +105,7 @@ class Blammo < RTanque::Bot::Brain
     if @jink
       @destination = sensors.position.move(sensors.heading + (RTanque::Heading::EIGHTH_ANGLE * 1.8 * @side), 200)
     else
-      @destination = @new_target_point.move(@target_heading + (RTanque::Heading::EIGHTH_ANGLE * 2 * @side), 100)
+      @destination = @new_target_point.move(@target_heading + (RTanque::Heading::EIGHTH_ANGLE * 3 * @side), 300)
     end
 
   end
@@ -107,7 +114,7 @@ class Blammo < RTanque::Bot::Brain
     if @destination
       heading = sensors.position.heading(@destination)
       command.heading = heading
-      speed = [sensors.position.distance(@destination) / 20, 1].max
+      speed = [sensors.position.distance(@destination) / 5, MAX_BOT_SPEED / 2].max
       if (sensors.heading.delta(heading)).abs > RTanque::Heading::EIGHTH_ANGLE * 2
         speed = -speed
       end
