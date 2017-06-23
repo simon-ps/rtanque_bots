@@ -6,11 +6,11 @@ class Blammo < RTanque::Bot::Brain
 
   TURRET_FIRE_RANGE = RTanque::Heading::ONE_DEGREE * 3
 
-  SWITCH_SIDES_TICK = RTanque::Shell::SHELL_SPEED_FACTOR * 100 + rand(50)
 
   FIRE_POWER = MAX_FIRE_POWER
 
   def tick!
+    @switch_sides_tick ||= RTanque::Shell::SHELL_SPEED_FACTOR * 100
     @centre ||= RTanque::Point.new(arena.width / 2, arena.height / 2, arena)
     @sweep ||= RTanque::Heading.delta_between_points(sensors.position, sensors.radar_heading, @centre).to_f
 
@@ -40,7 +40,7 @@ class Blammo < RTanque::Bot::Brain
 
     move
 
-    at_tick_interval(SWITCH_SIDES_TICK) do
+    at_tick_interval(@switch_sides_tick) do
       @side = -@side
       @jink = false
     end
@@ -60,7 +60,12 @@ class Blammo < RTanque::Bot::Brain
   end
 
   def get_radar_lock
-    sensors.radar.find { |reflection| reflection.name != NAME } || sensors.radar.first
+    reflections = sensors.radar.find { |reflection| reflection.name != NAME }
+    if reflections
+      sensors.radar.sort_by{|r| r.distance }.first
+    else
+      sensors.radar.first
+    end
   end
 
   def analyse_target
