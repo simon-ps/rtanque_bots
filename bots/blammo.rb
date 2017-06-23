@@ -6,9 +6,14 @@ class Blammo < RTanque::Bot::Brain
 
   TURRET_FIRE_RANGE = RTanque::Heading::ONE_DEGREE * 3
 
+  SWITCH_SIDES_TICK = RTanque::Shell::SHELL_SPEED_FACTOR * 100 + rand(50)
+
   FIRE_POWER = MAX_FIRE_POWER
 
   def tick!
+    @centre ||= RTanque::Point.new(arena.width / 2, arena.height / 2, arena)
+    @sweep ||= RTanque::Heading.delta_between_points(sensors.position, sensors.radar_heading, @centre).to_f
+
     @my_old_health ||= sensors.health
     @jink ||= false
     @side ||= 1
@@ -24,6 +29,7 @@ class Blammo < RTanque::Bot::Brain
 
       get_behind_target
       @old_target_heading = @target_heading
+      @sweep = RTanque::Heading.delta_between_points(sensors.position, sensors.radar_heading, @centre).to_f
     else
       acquire_target
     end
@@ -34,7 +40,7 @@ class Blammo < RTanque::Bot::Brain
 
     move
 
-    at_tick_interval(200) do
+    at_tick_interval(SWITCH_SIDES_TICK) do
       @side = -@side
       @jink = false
     end
@@ -45,12 +51,16 @@ class Blammo < RTanque::Bot::Brain
 
 
   def acquire_target
-    heading = sensors.radar_heading + MAX_RADAR_ROTATION
+    if @sweep > 0
+      heading = sensors.radar_heading + MAX_RADAR_ROTATION
+    else
+      heading = sensors.radar_heading - MAX_RADAR_ROTATION
+    end
     command.radar_heading, command.turret_heading = heading, heading
   end
 
   def get_radar_lock
-    sensors.radar.first
+    sensors.radar.find { |reflection| reflection.name != NAME } || sensors.radar.first
   end
 
   def analyse_target
@@ -84,7 +94,7 @@ class Blammo < RTanque::Bot::Brain
       estimated_target_heading += heading_change
       target_pos = target_pos.move(estimated_target_heading, @target_speed)
       #puts "  estimated_target_heading: #{estimated_target_heading.to_degrees}, target_pos: #{target_pos.x} #{target_pos.y}"
-      my_shot_pos = sensors.position.move(sensors.position.heading(target_pos), RTanque::Shell.speed(FIRE_POWER) * estimated_ticks)
+      my_shot_pos = sensors.position.move(sensors.position.heading(target_pos), RTanque::Bot::Turret::LENGTH + RTanque::Shell.speed(FIRE_POWER) * estimated_ticks)
       break if estimated_ticks > 200
     end
 
@@ -103,9 +113,9 @@ class Blammo < RTanque::Bot::Brain
   def get_behind_target
     return unless @target_heading
     if @jink
-      @destination = sensors.position.move(sensors.heading + (RTanque::Heading::EIGHTH_ANGLE * 1.8 * @side), 200)
+      @destination = sensors.position.move(sensors.heading + (RTanque::Heading::EIGHTH_ANGLE * 1.8 * @side), 200 + rand(200))
     else
-      @destination = @new_target_point.move(@target_heading + (RTanque::Heading::EIGHTH_ANGLE * 3 * @side), 300)
+      @destination = @new_target_point.move(@target_heading + (RTanque::Heading::EIGHTH_ANGLE * 3 * @side), 400 + rand(100))
     end
 
   end
